@@ -28,14 +28,19 @@ def show_stock_trend(df, selected_store):
     # Filter the dataframe for the selected product_sku
     product_data = df[df['product_sku'] == selected_sku]
 
-    # Plotting stock number over time for the selected SKU
-    fig, ax = plt.subplots()
-    ax.plot(product_data['current_date'], product_data[f'stock_number_{selected_store}'])
-    ax.set_title(f'Stock Number Over Time for SKU {selected_sku}')
-    ax.set_xlabel('Date')
-    ax.set_ylabel('Stock Number')
+    # Calculate the daily sales based on stock decrease (negative change in stock number)
+    product_data['daily_sales'] = product_data[f'stock_number_{selected_store}'].diff(-1) * -1
+    # Consider only days with sales (negative stock changes)
+    product_data = product_data[product_data['daily_sales'] > 0]
 
-    # Customize the x-axis to show only several dates
+    # Plotting daily sales over time for the selected SKU
+    fig, ax = plt.subplots()
+    ax.plot(product_data['current_date'], product_data['daily_sales'])
+    ax.set_title(f'Daily Sales Over Time for SKU {selected_sku} at {selected_store}')
+    ax.set_xlabel('Date')
+    ax.set_ylabel('Daily Sales')
+
+    # Customize the x-axis to show dates
     ax.xaxis.set_major_locator(mdates.AutoDateLocator(minticks=10, maxticks=20))
     ax.xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m-%d'))
     plt.xticks(rotation=45)
@@ -75,8 +80,9 @@ def data_analysis_page(bucket_name, artificial_folder, artificial_pattern, real_
     latest_data = pd.merge(df_artificial, latest_dates, on=['product_sku', 'current_date'])
 
     # Display the latest stock number for the selected store
-    display_columns = ['product_sku', 'product_name', 'current_date', f'stock_number_{selected_store}']
+    display_columns = ['product_sku', 'product_name', 'product_size','current_date', f'stock_number_{selected_store}']
     st.write(latest_data[display_columns])
+    st.write('')
 
 
 
@@ -86,16 +92,31 @@ def data_analysis_page(bucket_name, artificial_folder, artificial_pattern, real_
     df_real = load_data(bucket_name, real_folder, real_pattern)
     df_real = preprocess_data(df_real, 'real')
     df_real = df_real[
-        df_real['product_name'].str.contains('potted plant', case=False) &
-        ~df_real['product_name'].str.contains('artificial', case=False) &
-        ~df_real['product_name'].str.contains('Artifi', case=False)
-    ]
-    df_real['current_date'] = pd.to_datetime(df_real['current_date'], infer_datetime_format=True, errors='coerce')
-    st.write(df_real.head())
+    df_real['product_name'].str.contains('potted plant', case=False) &
+    ~df_real['product_name'].str.contains('artificial', case=False) &
+    ~df_real['product_name'].str.contains('Artifi', case=False)
+]
+    st.subheader('Latest Stock Numbers')
+
+    # Create a dropdown menu for selecting a store
+    stock_columns = [col for col in df_real.columns if col.startswith('stock_number_')]
+    store_options = [col.replace('stock_number_', '') for col in stock_columns]
+    selected_store = st.selectbox('Select a store:', store_options)
+
+    # Get the latest date for each product
+    latest_dates = df_real.groupby('product_sku')['current_date'].max().reset_index()
+
+    # Merge to get the latest stock number for each product
+    latest_data = pd.merge(df_real, latest_dates, on=['product_sku', 'current_date'])
+
+    # Display the latest stock number for the selected store
+    display_columns = ['product_sku', 'product_name', 'product_size','current_date', f'stock_number_{selected_store}']
+    st.write(latest_data[display_columns])
+
 
     st.subheader('Combined Data')
     df_combined = pd.concat([df_artificial, df_real], ignore_index=True).drop_duplicates(keep='last')
-    st.write(df_combined.head())
+    # st.write(df_combined.head())
     num_artificial = df_combined[df_combined['product_type'] == 'artificial']['product_sku'].nunique()
     num_real = df_combined[df_combined['product_type'] == 'real']['product_sku'].nunique()
     # Count the unique product_sku for artificial and real plants
@@ -219,7 +240,7 @@ def popular_products_page(df_combined):
     # Convert 'current_date' to datetime and drop rows with NaT values
     df_combined['current_date'] = pd.to_datetime(df_combined['current_date'],  infer_datetime_format=True, errors='coerce')
     df_combined.dropna(subset=['current_date'], inplace=True)
-    df_combined['current_date'] = df_combined['current_date'].dt.date
+    # df_combined['current_date'] = df_combined['current_date'].dt.date
 
     # Find min and max dates to create the range of weeks
     min_date = df_combined['current_date'].min()
@@ -248,8 +269,7 @@ def popular_products_page(df_combined):
         end_date = end_date + pd.to_timedelta(23, unit='h') + pd.to_timedelta(59, unit='m') + pd.to_timedelta(59, unit='s')
 
         # Filter the dataset based on the selected date range
-        df_filtered = df_combined[(df_combined['current_date'] >= start_date) &
-                                  (df_combined['current_date'] <= end_date)]
+        df_filtered = df_combined[(df_combined['current_date'] >= start_date) & (df_combined['current_date'] <= end_date)]
 
 
 
@@ -372,10 +392,10 @@ def discount_analysis_page(df_analysis):
     st.write(f"Average discount percentage for discounted products: {average_discount_percentage:.2f}%")
     st.write(f"Sample size for discounted products: {sample_count_discounted}")
     st.write(f"Sample size for non-discounted products: {sample_count_non_discounted}")
-    st.write(f"Average daily sales for discounted products at {selected_store}: {average_sales_discounted}")
-    st.write(f"Average daily sales for non-discounted products at {selected_store}: {average_sales_non_discounted}")
+    st.write(f"Average daily sales for discounted products at {selected_store}: {average_sales_discounted:.2f}")
+    st.write(f"Average daily sales for non-discounted products at {selected_store}: {average_sales_non_discounted:.2f}")
     st.write("t-test results:")
-    st.write("T-statistic:", t_statistic)
+    st.write("T-statistic:", f"{t_statistic:.4f}")
     st.write("P-value:", p_value)
 
     # Determine significance
