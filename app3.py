@@ -95,7 +95,7 @@ def data_analysis_page(bucket_name, artificial_folder, artificial_pattern, real_
     df_real['product_name'].str.contains('potted plant', case=False) &
     ~df_real['product_name'].str.contains('artificial', case=False) &
     ~df_real['product_name'].str.contains('Artifi', case=False)
-]
+    ]
     st.subheader('Latest Stock Numbers')
 
     # Create a dropdown menu for selecting a store
@@ -234,8 +234,21 @@ def forecast_visualization_page(df_real, df_artificial):
 
 from datetime import timedelta
 
-def popular_products_page(df_combined):
+def popular_products_page(df_combined, df_artificial, df_real):
     st.title('Popular Products Analysis')
+    
+    # Product type selection
+    product_type = st.selectbox('Select product type:', ['Both', 'Artificial', 'Real'])
+
+    # Filter the combined DataFrame based on the selected product type
+    if product_type == 'Artificial':
+        df_combined = df_artificial
+    elif product_type == 'Real':
+        df_real = df_real[
+        df_real['product_name'].str.contains('potted plant', case=False) &
+        ~df_real['product_name'].str.contains('artificial', case=False) &
+        ~df_real['product_name'].str.contains('Artifi', case=False)]
+        df_combined = df_real
 
     # Convert 'current_date' to datetime and drop rows with NaT values
     df_combined['current_date'] = pd.to_datetime(df_combined['current_date'],  infer_datetime_format=True, errors='coerce')
@@ -299,6 +312,7 @@ def popular_products_page(df_combined):
     restock_counts = df_popular.groupby('product_sku')['is_restocked'].sum().reset_index()
 
     # Merge to get product names, sizes, and types without changing the original DataFrame
+
     merge_columns = ['product_sku', 'product_name', 'product_size']
     if 'product_type' in df_popular.columns:
         merge_columns.append('product_type')
@@ -429,7 +443,7 @@ def main():
         df_artificial = load_data(bucket_name, artificial_folder, artificial_pattern)
         df_real = load_data(bucket_name, real_folder, real_pattern)
         df_combined = pd.concat([df_artificial, df_real], ignore_index=True).drop_duplicates(keep='last')
-        popular_products_page(df_combined)
+        popular_products_page(df_combined, df_artificial, df_real)
     elif choice == "Discount Analysis":
         df_artificial = load_data(bucket_name, artificial_folder, artificial_pattern)
         df_real = load_data(bucket_name, real_folder, real_pattern)
